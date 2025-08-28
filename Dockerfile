@@ -1,6 +1,6 @@
 # Base: WITHOUT models since your volume already has them
 # Consider pinning a tag from Valyrian's repo instead of latest
-FROM valyriantech/comfyui-without-flux:latest
+FROM valyriantech/comfyui-with-flux:latest
 
 ARG VENV_DIR=/opt/comfy-env
 ENV PATH="${VENV_DIR}/bin:${PATH}" \
