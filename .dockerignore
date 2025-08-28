@@ -1,0 +1,12 @@
+# keep the Docker context small
+.git
+**/__pycache__/
+**/*.pyc
+workspace
+models
+checkpoints
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+node_modules
