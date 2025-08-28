@@ -10,27 +10,41 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # <-- lets Actions push to GHCR with GITHUB_TOKEN
+      packages: write   # allow pushing image to GHCR with GITHUB_TOKEN
     steps:
+      # Free up ~20–30GB on the runner before building
+      - name: Free disk space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          # overprovision-lvm: 'true'  # enable if you still hit low space
+
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        with:
+          fetch-depth: 1
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build only linux/amd64 (smaller than multi-arch) and push
       - name: Build & Push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          platforms: linux/amd64
           tags: ghcr.io/${{ github.repository_owner }}/comfyui-depthflow:latest
+          provenance: false        # saves space/time; no SBOM/attestations
+          no-cache: true           # avoid local cache bloat on small runners
