@@ -1,40 +1,54 @@
-# pick ONE of these:
-# FROM valyriantech/comfyui-with-flux:latest
-# FROM valyriantech/comfyui-with-flux:11102024
-#FROM valyriantech/comfyui-with-flux:latest
+# Base: WITHOUT models since your volume already has them
+# Consider pinning a tag from Valyrian's repo instead of latest
 FROM valyriantech/comfyui-without-flux:latest
 
-# 1) Build deps so imgui-bundle can compile once at build time
+ARG VENV_DIR=/opt/comfy-env
+ENV PATH="${VENV_DIR}/bin:${PATH}" \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONUNBUFFERED=1
+
+# --- Build-time deps so imgui-bundle/GLFW can compile once ---
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential cmake ninja-build pkg-config \
     libx11-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
     mesa-common-dev libgl1-mesa-dev libglu1-mesa-dev \
-    && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
-# 2) A small venv baked into the image; use it to run ComfyUI
-RUN python3 -m venv /opt/comfy-env \
- && /opt/comfy-env/bin/pip install --upgrade pip
+# --- venv for ComfyUI runtime & Depthflow deps ---
+RUN python3 -m venv "${VENV_DIR}" \
+ && "${VENV_DIR}/bin/pip" install --upgrade pip setuptools wheel
 
-# 3) Depthflow + friends (builds imgui-bundle wheel during image build)
-RUN /opt/comfy-env/bin/pip install \
-      imgui-bundle==1.6.3 shaderflow==0.9.1 depthflow==0.9.1 opencv-python-headless
+# --- Install Depthflow + deps (build imgui-bundle now) ---
+RUN "${VENV_DIR}/bin/pip" install \
+      imgui-bundle==1.6.3 \
+      shaderflow==0.9.1 \
+      depthflow==0.9.1 \
+      opencv-python-headless
 
-# 4) Optional: clone the ComfyUI-Depthflow-Nodes into the image
+# --- Optional: include the ComfyUI-Depthflow custom node ---
 RUN mkdir -p /workspace/ComfyUI/custom_nodes \
  && git clone --depth=1 https://github.com/akatz-ai/ComfyUI-Depthflow-Nodes.git \
       /workspace/ComfyUI/custom_nodes/ComfyUI-Depthflow-Nodes
 
-# 5) Slim down: keep only the runtime libs (the wheel is already built)
-RUN apt-get purge -y --auto-remove build-essential cmake ninja-build pkg-config \
-    libx11-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-    mesa-common-dev libgl1-mesa-dev libglu1-mesa-dev \
+# --- Verify imports at build time (early failure if something’s off) ---
+RUN python - <<'PY'
+import imgui_bundle, cv2
+from broken.core.extra.loaders import LoadImage
+import shaderflow
+print("Depthflow stack OK:", getattr(imgui_bundle, "__version__", "imgui ok"))
+PY
+
+# --- Remove build deps; keep minimal runtime libs (GL + X11 runtimes) ---
+RUN apt-get purge -y --auto-remove \
+      build-essential cmake ninja-build pkg-config \
+      libx11-dev xorg-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+      mesa-common-dev libgl1-mesa-dev libglu1-mesa-dev \
  && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 \
+      libgl1 libglib2.0-0 \
+      libx11-6 libxrandr2 libxinerama1 libxcursor1 libxi6 \
  && rm -rf /var/lib/apt/lists/*
 
-# 6) Make sure we use our venv by default
-ENV PATH="/opt/comfy-env/bin:${PATH}"
+EXPOSE 8188
 
-# Their template calls a persistent /workspace/start_user.sh on boot—keep that flow.
-# We just default to starting ComfyUI with our venv if nothing overrides it.
+# Start ComfyUI; Valyrian's flow also calls /workspace/start_user.sh if present
 CMD ["python", "/workspace/ComfyUI/main.py", "--listen", "0.0.0.0", "--port", "8188"]
