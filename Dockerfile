@@ -1,7 +1,8 @@
 # pick ONE of these:
 # FROM valyriantech/comfyui-with-flux:latest
 # FROM valyriantech/comfyui-with-flux:11102024
-FROM valyriantech/comfyui-with-flux:latest
+#FROM valyriantech/comfyui-with-flux:latest
+FROM valyriantech/comfyui-without-flux:latest
 
 # 1) Build deps so imgui-bundle can compile once at build time
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
